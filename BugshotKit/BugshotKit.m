@@ -7,6 +7,8 @@
 #import "BSKNavigationController.h"
 #import <asl.h>
 #import "MABGTimer.h"
+#include <pthread.h>
+
 @import CoreText;
 
 @interface UIViewController ()
@@ -184,10 +186,18 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
             }];
         });
         
+#ifdef __IPHONE_10_0
+        NSPipe* pipe = NSPipe.pipe;
+        NSFileHandle* fhr = [pipe fileHandleForReading];
+        dup2([[pipe fileHandleForWriting] fileDescriptor], fileno(stderr));
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(readCompleted:) name:NSFileHandleReadCompletionNotification object:fhr];
+        [fhr readInBackgroundAndNotify];
+#else
         dispatch_async(self.logQueue, ^{
             [self updateFromASL];
             dispatch_resume(source);
         });
+#endif
     }
     return self;
 }
@@ -195,9 +205,23 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
 - (void)dealloc
 {
     [NSNotificationCenter.defaultCenter removeObserver:self name:UIWindowDidBecomeVisibleNotification object:nil];
+#ifdef __IPHONE_10_0
+    [NSNotificationCenter.defaultCenter removeObserver:self name:NSFileHandleReadCompletionNotification object:nil];
+#endif
     if (! self.isDisabled) {
         dispatch_source_cancel(source);
     }
+}
+
+- (void)readCompleted:(NSNotification*)notification
+{
+    [((NSFileHandle*)notification.object) readInBackgroundAndNotify];
+    NSString* logs = [NSString.alloc initWithData:notification.userInfo[NSFileHandleNotificationDataItem] encoding:NSUTF8StringEncoding];
+    
+    dispatch_async(dispatch_get_main_queue(), ^
+                   {
+                       [self addLogMessage:logs timestamp:[[NSDate date] timeIntervalSinceNow]];
+                   });
 }
 
 - (void)ensureWindow
