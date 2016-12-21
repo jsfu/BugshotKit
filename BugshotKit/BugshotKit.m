@@ -479,7 +479,9 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
         NSMutableString *string = [NSMutableString string];
 
         char fdate[24];
-        for (BSKLogMessage *msg in self.consoleMessages) {
+//        for (BSKLogMessage *msg in self.consoleMessages) {
+        for (int i=0; i<self.consoleMessages.count; i++) {
+            BSKLogMessage *msg = (BSKLogMessage*)[self.consoleMessages objectAtIndex:i];
             if (dateStamps) {
                 time_t timestamp = (time_t) msg.timestamp;
                 struct tm *lt = localtime(&timestamp);
